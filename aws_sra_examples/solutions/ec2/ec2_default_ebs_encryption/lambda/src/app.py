@@ -233,6 +233,25 @@ def process_enable_ebs_encryption_by_default(account_session: boto3.Session, acc
             LOGGER.info(f"Default EBS encryption is already enabled in {account_id} | {region}")
 
 
+def process_disable_ebs_encryption_by_default(account_session: boto3.Session, account_id: str, regions: list) -> None:
+    """Process disable ec2 default EBS encryption.
+
+    Args:
+        account_session: boto3 session
+        account_id: account to assume role in
+        regions: regions to process
+    """
+
+    for region in regions:
+        ec2_client: EC2Client = account_session.client("ec2", region, config=BOTO3_CONFIG)
+
+        response: GetEbsEncryptionByDefaultResultTypeDef = ec2_client.get_ebs_encryption_by_default()
+        if response["EbsEncryptionByDefault"]:
+            ec2_client.disable_ebs_encryption_by_default()
+            LOGGER.info(f"Default EBS encryption disabled in {account_id} | {region}")
+        else:
+            LOGGER.info(f"Default EBS encryption is already disabled in {account_id} | {region}")
+
 def publish_sns_message(message: dict, subject: str, sns_topic_arn: str) -> None:
     """Publish SNS Message.
 
@@ -346,7 +365,7 @@ def process_account(event: dict, aws_account_id: str, params: dict) -> None:
     if event.get("local_testing") == "true":
         local_testing(aws_account, params)
     else:
-        sns_message = {"Action": "Add", "AccountId": aws_account["Id"]}
+        sns_message = {"Action": params["action"], "AccountId": aws_account["Id"]}
         publish_sns_message(sns_message, "EC2 Default EBS Encryption", params["SNS_TOPIC_ARN"])
 
 
@@ -381,7 +400,11 @@ def process_event_sns(event: dict) -> None:
 
         aws_account = get_account_info(account_id=message["AccountId"])
         account_session = assume_role(params["CONFIGURATION_ROLE_NAME"], params["ROLE_SESSION_NAME"], aws_account["Id"])
-        process_enable_ebs_encryption_by_default(account_session, aws_account["Id"], regions)
+
+        if os.environ.get("DISABLE_ENCRYPTION") == 'false':
+            process_enable_ebs_encryption_by_default(account_session, aws_account["Id"], regions)
+        else:
+            process_disable_ebs_encryption_by_default(account_session, aws_account["Id"], regions)
 
 
 def process_event_organizations(event: dict) -> None:
