@@ -1,0 +1,246 @@
+########################################################################
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+########################################################################
+AWSTemplateFormatVersion: 2010-09-09
+Description:
+  This template creates an initial Macie scheduled job based on criteria - 'macie_org' solution in the repo,
+  https://github.com/aws-samples/aws-security-reference-architecture-examples (sra-1ssgnse5m)
+
+Metadata:
+  SRA:
+    Version: 1.1
+    Order: 3
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: General Properties
+        Parameters:
+          - pSRASolutionName
+      - Label:
+          default: Role Properties
+        Parameters:
+          - pManagementAccountId
+
+    ParameterLabels:
+      pManagementAccountId:
+        default: Organization Management Account ID
+      pSRASolutionName:
+        default: SRA Solution Name
+
+Parameters:
+  pManagementAccountId:
+    AllowedPattern: '^\d{12}$'
+    ConstraintDescription: Must be 12 digits
+    Description: Organization Management Account ID
+    Type: String
+  pSRASolutionName:
+    AllowedValues: [sra-macie-org]
+    Default: sra-macie-org
+    Description: The SRA solution name. The default value is the folder name of the solution
+    Type: String
+
+Resources:
+
+  rMacieOrgDefaultJobLambdaRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W11
+            reason: 'Allow * in resource for a single specific action'
+          - id: W28
+            reason: The role name is defined
+    Properties:
+      RoleName: sra-macie-create-default-job
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRole
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+      Path: '/'
+      Policies:
+        - PolicyName: sra-macie-org-policy-logs
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: CreateLogStreamAndEvents
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/CreateMacieCriteriaBasedJobLambda:log-stream:*
+
+        - PolicyName: sra-macie-org-macie-job
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: MacieCreateDefaultJob
+                Effect: Allow
+                Action:
+                  - macie2:CreateClassificationJob
+                  - macie2:TagResource
+                Resource: '*'
+
+      Tags:
+        - Key: sra-solution
+          Value: !Ref pSRASolutionName
+
+  rCreateMacieCriteriaBasedJobLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: CreateMacieCriteriaBasedJobLambda
+      Handler: "index.lambda_handler"
+      Runtime: python3.12
+      MemorySize: 128
+      Timeout: 300
+      Role: !GetAtt rMacieOrgDefaultJobLambdaRole.Arn
+      Code:
+        ZipFile: |
+            import json, boto3, os, urllib3
+            import logging
+            import cfnresponse
+            import time
+            from botocore.exceptions import ClientError
+          
+            # Setup Default Logger
+            LOGGER = logging.getLogger("sra")
+            log_level: str = os.environ.get("LOG_LEVEL", "ERROR")
+            LOGGER.setLevel(log_level)
+
+            def lambda_handler(event, context):
+              try:
+                  macie2_client = boto3.client('macie2')
+                  response = macie2_client.create_classification_job(
+                      description='Default SRA Macie job (Daily)',
+                      jobType='SCHEDULED',
+                      initialRun=True,
+                      name='Default_Daily_Macie_Job',
+                      managedDataIdentifierSelector='ALL',
+                      s3JobDefinition={
+                          'bucketCriteria': {
+                              'excludes': {
+                                  'and': [
+                                      {
+                                          'tagCriterion': {
+                                              'comparator': 'EQ',
+                                              'tagValues': [
+                                                  {
+                                                      'key': 'sra-exclude-from-default-job',
+                                                      'value': 'True'
+                                                  }
+                                              ]
+                                          }
+                                      }
+                                  ]
+                              }
+                          }
+                      },
+                      samplingPercentage=100,
+                      scheduleFrequency={
+                          'dailySchedule': {}
+                      },
+                      tags={
+                          'JobInfo': 'Default SRA Macie job'
+                      }
+                  )
+                  LOGGER.debug(f'Response: {response}')
+              except ClientError as e:
+                  LOGGER.error(e)
+      Environment:
+        Variables:
+          Region:
+            !Ref "AWS::Region"
+
+  rLambdaFunctionCallerRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: sraLambdaFunctionCallerRole
+      Path: /
+      Policies:
+        - PolicyName: sraInvokeLambdaEventLogsPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: !Sub "arn:${AWS::Partition}:logs:*:*:*"
+        - PolicyName: sraInvokeLambdaExecute
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: "lambda:InvokeFunction"
+                Resource:
+                  - !GetAtt rCreateMacieCriteriaBasedJobLambda.Arn
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - "sts:AssumeRole"
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+
+  rLambdaFunctionCaller:
+      Type: AWS::Lambda::Function
+      DependsOn: rCreateMacieCriteriaBasedJobLambda
+      Properties:
+        FunctionName: LambdaFunctionCaller
+        Code:
+          ZipFile: |
+            import boto3
+            import json
+            import cfnresponse
+  
+            def handler(event, context):
+              try:
+                if event['RequestType'] == 'Create' or event['RequestType'] == 'Update':
+                  lambda_client = boto3.client('lambda')
+                  response = lambda_client.invoke(
+                      FunctionName='CreateMacieCriteriaBasedJobLambda',
+                      InvocationType='Event',
+                      Payload='{}',
+                  )
+                
+                  print(response)
+                else:
+                  print("Deleting the function")
+
+                cfnresponse.send(
+                      event,
+                      context,
+                      "SUCCESS",
+                      {
+                          "data": "Success"
+                      }    
+                  )
+            
+              except Exception as e:
+                  cfnresponse.send(
+                      event,
+                      context,
+                      "FAILED",
+                      {
+                          "data": "Error Creating parameters: {}".format(repr(e))
+                      }
+ 
+                  )
+        Handler: index.handler
+        Role: !GetAtt rLambdaFunctionCallerRole.Arn
+        Runtime: python3.12
+        Timeout: 60
+
+  rInvokeCreateMacieCriteriaBasedJobLambda:
+    Type: AWS::CloudFormation::CustomResource
+    DependsOn: rLambdaFunctionCaller
+    Version: "1.0"
+    Properties:
+      ServiceToken: !GetAtt rLambdaFunctionCaller.Arn

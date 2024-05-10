@@ -114,6 +114,7 @@ Resources:
                   - macie2:PutClassificationExportConfiguration
                   - macie2:UpdateMacieSession
                   - macie2:UpdateOrganizationConfiguration
+                  - macie2:CreateClassificationJob
                 Resource: '*'
 
               - Sid: MacieMember

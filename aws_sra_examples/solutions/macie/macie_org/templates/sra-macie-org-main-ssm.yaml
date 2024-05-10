@@ -300,6 +300,38 @@ Resources:
         - Key: sra-solution
           Value: !Ref pSRASolutionName
 
+  rMacieConfigurationJobStackSet:
+    Type: AWS::CloudFormation::StackSet
+    DependsOn:
+      - rMacieConfigurationStack
+    Properties:
+      StackSetName: sra-macie-org-configuration-job
+      AdministrationRoleARN: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${pStackSetAdminRole}
+      CallAs: SELF
+      Capabilities:
+        - CAPABILITY_NAMED_IAM
+      Description: !Sub ${pSRASolutionVersion} - Deploys an default Macie job via ${pSRASolutionName} for monitoring buckets
+      ExecutionRoleName: !Ref pStackExecutionRole
+      ManagedExecution:
+        Active: true
+      OperationPreferences:
+        FailureTolerancePercentage: 0
+        MaxConcurrentPercentage: 100
+        RegionConcurrencyType: PARALLEL
+      PermissionModel: SELF_MANAGED
+      StackInstancesGroup:
+        - DeploymentTargets:
+            Accounts:
+              - !Ref pAuditAccountId
+          Regions:
+            - !Ref AWS::Region
+      TemplateURL: !Sub https://${pSRAStagingS3BucketName}.s3.${AWS::Region}.${AWS::URLSuffix}/${pSRASolutionName}/templates/sra-macie-org-configuration-job.yaml
+      Parameters:
+        - ParameterKey: pManagementAccountId
+          ParameterValue: !Ref AWS::AccountId
+      Tags:
+        - Key: sra-solution
+          Value: !Ref pSRASolutionName
   rMacieDeliveryKMSKeyStackSet:
     Type: AWS::CloudFormation::StackSet
     Properties:
