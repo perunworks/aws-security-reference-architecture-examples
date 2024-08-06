@@ -12,6 +12,7 @@ Version: 1.1
 Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 SPDX-License-Identifier: MIT-0
 """
+
 from __future__ import annotations
 
 import json
@@ -44,7 +45,7 @@ helper = CfnResource(json_logging=True, log_level=log_level, boto_level="CRITICA
 PRINCIPAL_NAME = "malware-protection.guardduty.amazonaws.com"
 SERVICE_NAME = "guardduty.amazonaws.com"
 UNEXPECTED = "Unexpected!"
-MAX_RUN_COUNT = 30  # 5 minute wait = 30 x 10 seconds
+MAX_RUN_COUNT = 60  # 5 minute wait = 30 x 10 seconds
 SLEEP_SECONDS = 10
 BOTO3_CONFIG = Config(retries={"max_attempts": 10, "mode": "standard"})
 
@@ -310,6 +311,33 @@ def lambda_handler(event: Dict[str, Any], context: Context) -> None:
             process_sns_records(event["Records"])
         elif "RequestType" in event:
             helper(event, context)
+    except Exception:
+        LOGGER.exception(UNEXPECTED)
+        raise ValueError(f"Unexpected error executing Lambda function. Review CloudWatch logs '{context.log_group_name}' for details.") from None
+
+
+def terraform_handler(event: Dict[str, Any], context: Context) -> None:
+    """Lambda Handler.
+
+    Args:
+        event: event data
+        context: runtime information
+
+    Raises:
+        ValueError: Unexpected error executing Lambda function
+    """
+    LOGGER.info("....Lambda Handler Started....")
+    event_info = {"Event": event}
+    LOGGER.info(event_info)
+    try:
+        if "Records" not in event and "RequestType" not in event and ("source" not in event and event["source"] != "aws.controltower"):
+            raise ValueError(
+                f"The event did not include Records or RequestType. Review CloudWatch logs '{context.log_group_name}' for details."
+            ) from None
+        elif "Records" in event and event["Records"][0]["EventSource"] == "aws:sns":
+            process_sns_records(event["Records"])
+        elif "RequestType" in event:
+            process_cloudformation_event(event, context)
     except Exception:
         LOGGER.exception(UNEXPECTED)
         raise ValueError(f"Unexpected error executing Lambda function. Review CloudWatch logs '{context.log_group_name}' for details.") from None
