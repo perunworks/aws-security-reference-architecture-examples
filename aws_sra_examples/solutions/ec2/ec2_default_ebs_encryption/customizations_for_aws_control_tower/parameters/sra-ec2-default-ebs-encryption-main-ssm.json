@@ -38,5 +38,9 @@
     {
         "ParameterKey": "pSRASolutionVersion",
         "ParameterValue": "v1.3"
+    },
+    {
+        "ParameterKey": "pDisableDefaultEncryption",
+        "ParameterValue": "false"
     }
 ]

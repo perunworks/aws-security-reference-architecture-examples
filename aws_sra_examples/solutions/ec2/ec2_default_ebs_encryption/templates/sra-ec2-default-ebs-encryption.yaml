@@ -19,6 +19,7 @@ Metadata:
           - pSRASolutionName
           - pSRAStagingS3BucketName
           - pSRAAlarmEmail
+          - pDisableDefaultEncryption
 
       - Label:
           default: Lambda Function Properties
@@ -85,6 +86,8 @@ Metadata:
         default: SRA Solution Name
       pSRAStagingS3BucketName:
         default: SRA Staging S3 Bucket Name
+      pDisableDefaultEncryption:
+        default: Defining if default encryption should be disabled
 
 Parameters:
   pComplianceFrequency:
@@ -94,6 +97,11 @@ Parameters:
     MinValue: 1
     MaxValue: 30
     Type: Number
+  pDisableDefaultEncryption:
+    Type: String
+    Description: Default is false. Set to true if you want to Disable encryption.
+    Default: false
+    AllowedValues: [ true, false ]
   pControlTowerLifeCycleRuleName:
     AllowedPattern: '^[\w.-]{1,64}$'
     ConstraintDescription: Max 64 alphanumeric and underscore characters. Also special characters supported [., -]
@@ -445,6 +453,7 @@ Resources:
           EXCLUDE_ACCOUNT_TAGS: !Ref pExcludeEC2DefaultEBSEncryptionTags
           ROLE_SESSION_NAME: sra-ec2-default-ebs-encryption
           SNS_TOPIC_ARN: !Ref rEC2DefaultEBSEncryptionTopic
+          DISABLE_ENCRYPTION: !Ref pDisableDefaultEncryption
       Tags:
         - Key: sra-solution
           Value: !Ref pSRASolutionName
@@ -460,6 +469,7 @@ Resources:
       EXCLUDE_ACCOUNT_TAGS: !Ref pExcludeEC2DefaultEBSEncryptionTags
       ROLE_SESSION_NAME: sra-ec2-default-ebs-encryption
       SNS_TOPIC_ARN: !Ref rEC2DefaultEBSEncryptionTopic
+      DISABLE_ENCRYPTION: !Ref pDisableDefaultEncryption
 
   rEC2DefaultEBSEncryptionTopic:
     Type: AWS::SNS::Topic

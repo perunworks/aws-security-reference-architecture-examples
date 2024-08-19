@@ -90,6 +90,7 @@ Resources:
                 Action:
                   - ec2:GetEbsEncryptionByDefault
                   - ec2:EnableEbsEncryptionByDefault
+                  - ec2:DisableEbsEncryptionByDefault
                 Resource: '*'
       Tags:
         - Key: sra-solution

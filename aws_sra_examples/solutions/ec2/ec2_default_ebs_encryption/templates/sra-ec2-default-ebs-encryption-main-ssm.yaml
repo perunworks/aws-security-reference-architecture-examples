@@ -22,12 +22,7 @@ Metadata:
           - pSRAStagingS3BucketName
           - pRootOrganizationalUnitId
           - pSRAAlarmEmail
-
-      - Label:
-          default: IAM Properties
-        Parameters:
-          - pStackSetAdminRole
-          - pStackExecutionRole
+          - pDisableDefaultEncryption
 
       - Label:
           default: EC2 Default EBS Encryption Properties
@@ -51,10 +46,6 @@ Metadata:
           - pComplianceFrequency
 
     ParameterLabels:
-      pStackSetAdminRole:
-        default: Stack Set Role
-      pStackExecutionRole:
-        default: Stack execution role
       pComplianceFrequency:
         default: Frequency to Check for Organizational Compliance
       pControlTowerRegionsOnly:
@@ -83,18 +74,10 @@ Metadata:
         default: SRA Solution Version
       pSRAStagingS3BucketName:
         default: SRA Staging S3 Bucket Name
+      pDisableDefaultEncryption:
+        default: Defining if default encryption should be disabled
 
 Parameters:
-  pStackSetAdminRole:
-    AllowedValues: [sra-stackset]
-    Default: sra-stackset
-    Description: The administration role name that is used in the stackset.
-    Type: String
-  pStackExecutionRole:
-    AllowedValues: [sra-execution]
-    Default: sra-execution
-    Description: The execution role name that is used in the stack.
-    Type: String
   pComplianceFrequency:
     ConstraintDescription: Compliance Frequency must be a number between 1 and 30, inclusive.
     Default: 7
@@ -102,6 +85,11 @@ Parameters:
     MinValue: 1
     MaxValue: 30
     Type: Number
+  pDisableDefaultEncryption:
+    Type: String
+    Description: Default is false. Set to true if you want to Disable encryption.
+    Default: false
+    AllowedValues: [ true, false ]
   pControlTowerRegionsOnly:
     Type: String
     Description: Only enable in the Control Tower governed regions
@@ -269,6 +257,7 @@ Resources:
         pOrganizationId: !Ref pOrganizationId
         pSRAAlarmEmail: !Ref pSRAAlarmEmail
         pSRAStagingS3BucketName: !Ref pSRAStagingS3BucketName
+        pDisableDefaultEncryption: !Ref pDisableDefaultEncryption
 
   rEC2DefaultEBSEncryptionGlobalEventsStackSet:
     Type: AWS::CloudFormation::StackSet
@@ -276,13 +265,13 @@ Resources:
     DependsOn: rEC2DefaultEBSEncryptionStack
     Properties:
       StackSetName: sra-ec2-default-ebs-encryption-global-events
-      AdministrationRoleARN: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${pStackSetAdminRole}
+      AdministrationRoleARN: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/service-role/AWSControlTowerStackSetRole
       CallAs: SELF
       Capabilities:
         - CAPABILITY_NAMED_IAM
       Description:
         !Sub ${pSRASolutionVersion} - Deploys EventBridge Rules via ${pSRASolutionName} for capturing global events forwarding to the home region.
-      ExecutionRoleName: !Ref pStackExecutionRole
+      ExecutionRoleName: AWSControlTowerExecution
       ManagedExecution:
         Active: true
       OperationPreferences:

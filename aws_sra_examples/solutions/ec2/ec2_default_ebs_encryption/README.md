@@ -156,8 +156,7 @@ In the `management account (home region)`, launch the [sra-ec2-default-ebs-encry
 
 #### Solution Delete Instructions<!-- omit in toc -->
 
-1. In the `management account (home region)`, delete the AWS CloudFormation **Stack** created in step 3 of the solution deployment. **Note:** The solution will not modify the default EBS encryption setting on a `Delete` event. Only the SSM
-   configuration parameter is deleted in this step.
+1. In the `management account (home region)`, delete the AWS CloudFormation **Stack** created in step 3 of the solution deployment. **Note:** The solution will not modify the default EBS encryption setting on a `Delete` event. Only the SSM configuration parameter is deleted in this step. If you wish to disable the default encryption setting before set by this solution, then first update the stack and change parameter `Defining if default encryption should be disabled` from `false` to `true`. Then run the update. This disables default encryption.
 2. In the `management account (home region)`, delete the AWS CloudFormation **Stack** created in step 2 of the solution deployment.
 3. In the `management account (home region)`, delete the AWS CloudFormation **StackSet** created in step 1 of the solution deployment. **Note:** there should not be any `stack instances` associated with this StackSet.
 4. In the `management account (home region)`, delete the AWS CloudWatch **Log Group** (e.g. /aws/lambda/<solution_name>) for the Lambda function deployed in step 2 of the solution deployment.
